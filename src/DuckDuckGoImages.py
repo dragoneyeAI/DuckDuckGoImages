@@ -28,8 +28,9 @@ _licenses = [
     SHARE_AND_USE,
     SHARE_AND_USE_COMMECIALLY,
     MODIFY_SHARE_AND_USE,
-    MODIFY_SHARE_AND_USE_COMMERCIALLY
+    MODIFY_SHARE_AND_USE_COMMERCIALLY,
 ]
+
 
 @contextlib.contextmanager
 def tqdm_parallel(tqdm_object):
@@ -50,7 +51,17 @@ def tqdm_parallel(tqdm_object):
         tqdm_object.close()
 
 
-def download(query, folder='.', max_urls=None, thumbnails=False, parallel=False, shuffle=False, remove_folder=False, license=ALL, safe_search=True):
+def download(
+    query,
+    folder=".",
+    max_urls=None,
+    thumbnails=False,
+    parallel=False,
+    shuffle=False,
+    remove_folder=False,
+    license=ALL,
+    safe_search=True,
+):
     if thumbnails:
         urls = get_image_thumbnails_urls(query, license, safe_search)
     else:
@@ -71,18 +82,20 @@ def download(query, folder='.', max_urls=None, thumbnails=False, parallel=False,
     else:
         return _download_urls(urls, folder)
 
+
 def _download(url, folder):
-        try:
+    try:
+        filename = str(uuid.uuid4().hex)
+        while os.path.exists("{}/{}.jpg".format(folder, filename)):
             filename = str(uuid.uuid4().hex)
-            while os.path.exists("{}/{}.jpg".format(folder, filename)):
-                filename = str(uuid.uuid4().hex)
-            response = requests.get(url, stream=True, timeout=5.0, allow_redirects=True)
-            with Image.open(io.BytesIO(response.content)) as im:
-                with open("{}/{}.jpg".format(folder, filename), 'wb') as out_file:
-                    im.save(out_file)
-                    return True
-        except:
-            return False
+        response = requests.get(url, stream=True, timeout=5.0, allow_redirects=True)
+        with Image.open(io.BytesIO(response.content)) as im:
+            with open("{}/{}.jpg".format(folder, filename), "wb") as out_file:
+                im.save(out_file)
+                return True
+    except:
+        return False
+
 
 def _download_urls(urls, folder):
     downloaded = 0
@@ -90,6 +103,7 @@ def _download_urls(urls, folder):
         if _download(url, folder):
             downloaded += 1
     return downloaded
+
 
 def _parallel_download_urls(urls, folder):
     downloaded = 0
@@ -101,24 +115,30 @@ def _parallel_download_urls(urls, folder):
                     downloaded += 1
     return downloaded
 
+
 def get_image_urls(query, license, safe_search):
     token = _fetch_token(query)
     return _fetch_search_urls(query, token, license, safe_search)
+
 
 def get_image_thumbnails_urls(query, license, safe_search):
     token = _fetch_token(query)
     return _fetch_search_urls(query, token, license, safe_search, what="thumbnail")
 
-def _fetch_token(query, URL="https://duckduckgo.com/"):
-    res = requests.post(URL, data={'q': query})
+
+def _fetch_token(query, URL="http://duckduckgo.com/"):
+    res = requests.get(f"{URL}?q={query}&t=h_&iax=images&ia=images")
     if res.status_code != 200:
         return ""
-    match = re.search(r"vqd='([\d-]+)'", res.text, re.M|re.I)
+    match = re.search(r"vqd=\"([\d-]+)\"", res.text, re.M | re.I)
     if match is None:
         return ""
     return match.group(1)
 
-def _fetch_search_urls(q, token, license, safe_search, URL="https://duckduckgo.com/", what="image"):
+
+def _fetch_search_urls(
+    q, token, license, safe_search, URL="https://duckduckgo.com/", what="image"
+):
     query = {
         "vqd": token,
         "q": q,
@@ -127,7 +147,7 @@ def _fetch_search_urls(q, token, license, safe_search, URL="https://duckduckgo.c
         "f": ",,,,,",
         "p": "1" if safe_search else "-1",
         "s": "100",
-        "u": "bing"
+        "u": "bing",
     }
     if license is not None and license in _licenses:
         query["f"] = f",,,,,license:{license}"
@@ -137,9 +157,10 @@ def _fetch_search_urls(q, token, license, safe_search, URL="https://duckduckgo.c
     urls.extend(_urls)
     while next is not None:
         query.update(parse.parse_qs(parse.urlsplit(next).query))
-        _urls, next = _get_urls(f"{URL}i.js", query, what) 
+        _urls, next = _get_urls(f"{URL}i.js", query, what)
         urls.extend(_urls)
     return urls
+
 
 def _get_urls(URL, query, what):
     urls = []
@@ -148,19 +169,21 @@ def _get_urls(URL, query, what):
         params=query,
         headers={
             "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36"
-        }
+        },
     )
     if res.status_code != 200:
-        return urls
+        return urls, None
 
     data = json.loads(res.text)
     for result in data["results"]:
         urls.append(result[what])
     return urls, data["next"] if "next" in data else None
 
+
 def _remove_folder(folder):
     if os.path.exists(folder):
         shutil.rmtree(folder, ignore_errors=True)
+
 
 def _create_folder(folder):
     if not os.path.exists(folder):
