@@ -2,7 +2,6 @@ import re
 import io
 import os
 import json
-import uuid
 import shutil
 import random
 import requests
@@ -11,6 +10,7 @@ from urllib import parse
 import joblib
 import contextlib
 from tqdm.auto import tqdm
+import hashlib
 
 
 ALL = None
@@ -30,6 +30,23 @@ _licenses = [
     MODIFY_SHARE_AND_USE,
     MODIFY_SHARE_AND_USE_COMMERCIALLY,
 ]
+
+_HEADERS = {
+    "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36"
+}
+
+_HEADERS_DOWNLOAD = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+}
 
 
 @contextlib.contextmanager
@@ -85,14 +102,21 @@ def download(
 
 def _download(url, folder):
     try:
-        filename = str(uuid.uuid4().hex)
-        while os.path.exists("{}/{}.jpg".format(folder, filename)):
-            filename = str(uuid.uuid4().hex)
-        response = requests.get(url, stream=True, timeout=5.0, allow_redirects=True)
+        filename = hashlib.md5(url.encode("utf-8")).hexdigest()
+        if os.path.exists("{}/{}.jpg".format(folder, filename)):
+            return True
+
+        response = requests.get(
+            url,
+            stream=True,
+            timeout=10.0,
+            allow_redirects=True,
+            headers=_HEADERS_DOWNLOAD,
+        )
         with Image.open(io.BytesIO(response.content)) as im:
-            with open("{}/{}.jpg".format(folder, filename), "wb") as out_file:
-                im.save(out_file)
-                return True
+            webp_filename = "{}/{}.webp".format(folder, filename)
+            im.save(webp_filename, "WEBP")
+            return True
     except:
         return False
 
@@ -167,9 +191,7 @@ def _get_urls(URL, query, what):
     res = requests.get(
         URL,
         params=query,
-        headers={
-            "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36"
-        },
+        headers=_HEADERS,
     )
     if res.status_code != 200:
         return urls, None
